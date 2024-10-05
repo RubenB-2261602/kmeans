@@ -175,6 +175,16 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
         //       (see rng.h)
 		std::cerr << "TODO: implement this" << std::endl;
 
+		// Get random centroids and get cluster defining - RB
+		std::vector<std::vector<size_t>> centroids(numClusters, std::vector<size_t>(numCols));
+		for (size_t i = 0; i < numClusters; i++)
+		{
+			std::vector<size_t> centroid(numCols);
+			rng.pickRandomIndices(numRows, centroid);
+			centroids[i] = centroid;
+		}
+		std::vector<size_t> clusters(numRows, -1);
+		
 		stepsPerRepetition[r] = numSteps;
 
 		// Make sure debug logging is only done on first iteration ; subsequent checks
