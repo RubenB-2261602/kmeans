@@ -148,6 +148,15 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 	}
 
 	// TODO: load dataset
+	std::ifstream input(inputFile);
+	if (!input.is_open())
+	{
+		std::cerr << "Unable to open input file " << inputFile << std::endl;
+		return -1;
+	}
+	std::vector<double> allData;
+	size_t numRows, numCols;
+	readData(input, allData, numRows, numCols);	
 
 	// This is a basic timer from std::chrono ; feel free to use the appropriate timer for
 	// each of the technologies, e.g. OpenMP has omp_get_wtime()
