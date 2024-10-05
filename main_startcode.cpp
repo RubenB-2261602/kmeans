@@ -162,6 +162,7 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 	// each of the technologies, e.g. OpenMP has omp_get_wtime()
 	Timer timer;
 
+	std::vector<size_t> bestClusters;
 	double bestDistSquaredSum = std::numeric_limits<double>::max(); // can only get better
 	std::vector<size_t> stepsPerRepetition(repetitions); // to save the number of steps each rep needed
 
@@ -181,6 +182,8 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 		{
 			std::vector<size_t> centroid(numCols);
 			rng.pickRandomIndices(numRows, centroid);
+			centroid[0] = allData[centroid.data()[0]];
+			centroid[1] = allData[centroid.data()[1]];
 			centroids[i] = centroid;
 		}
 		std::vector<size_t> clusters(numRows, -1);
