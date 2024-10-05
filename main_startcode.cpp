@@ -184,6 +184,15 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 			centroids[i] = centroid;
 		}
 		std::vector<size_t> clusters(numRows, -1);
+
+		bool changed = true;
+		while (changed)
+		{
+			changed = false;
+			int distanceSquaredSum = 0;
+
+			// TODO: Assign rest of kmeans algo - RB
+		}
 		
 		stepsPerRepetition[r] = numSteps;
 
