@@ -131,6 +131,23 @@ FileCSVWriter openDebugFile(const std::string &n)
 	return f;
 }
 
+void findClosestCentroidIndexAndDistance(std::vector<size_t> &point, std::vector<std::vector<size_t>> &centroids, int &newCluster, int &dist, size_t &numCols)
+{
+	double oldDist = std::numeric_limits<double>::max();
+	for (int i = 0; i < numCols - 1; i++)
+	{
+		double dx = point[0] - centroids[i][0];
+		double dy = point[1] - centroids[i][1];
+		dist = dx*dx - dy*dy;
+		if (dist  < oldDist)
+		{
+			oldDist = dist;
+			newCluster = i;
+		}
+	}
+	
+}
+
 int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFileName,
            int numClusters, int repetitions, int numBlocks, int numThreads,
            const std::string &centroidDebugFileName, const std::string &clusterDebugFileName)
@@ -193,8 +210,28 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 		{
 			changed = false;
 			int distanceSquaredSum = 0;
+			for (size_t p = 0; p < numRows; p += 2)
+			{
+				int newCluster, dist;
+				std::vector<size_t> point(numCols);
+				point[0] = allData[p];
+				point[1] = allData[p+1];
+				findClosestCentroidIndexAndDistance(point, centroids, newCluster, dist, numCols);
+				distanceSquaredSum += dist;
+				
+				if (newCluster != clusters[p])
+				{
+					clusters[p] = newCluster;
+					changed = true;
+				}
+			}
 
-			// TODO: Assign rest of kmeans algo - RB
+			if (changed)
+			{
+				// TODO: re-calculate centroids
+			}
+			
+			// TODO: keep track of the best clustering
 		}
 		
 		stepsPerRepetition[r] = numSteps;
