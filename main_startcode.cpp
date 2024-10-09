@@ -148,6 +148,12 @@ void findClosestCentroidIndexAndDistance(std::vector<size_t> &point, std::vector
 	
 }
 
+void averageOfPointsWithCluster(int j, std::vector<size_t> &clusters)
+{
+	// TODO: Calculate avarage of points in cluster,
+	// 			use as new centroid for that cluster
+}
+
 int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFileName,
            int numClusters, int repetitions, int numBlocks, int numThreads,
            const std::string &centroidDebugFileName, const std::string &clusterDebugFileName)
@@ -228,11 +234,23 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 
 			if (changed)
 			{
-				// TODO: re-calculate centroids
+				// TODO: re-calculate the centroids based on current clustering
+				for (size_t j = 0; j < numClusters; j++)
+				{
+					averageOfPointsWithCluster(j, clusters);
+				}
+				return -1;
+				
 			}
 			
-			// TODO: keep track of the best clustering
+			if (distanceSquaredSum < bestDistSquaredSum)
+			{
+				bestClusters = clusters;
+				bestDistSquaredSum = distanceSquaredSum;
+			}
 		}
+
+		
 		
 		stepsPerRepetition[r] = numSteps;
 
