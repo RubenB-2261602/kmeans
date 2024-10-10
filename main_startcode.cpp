@@ -138,7 +138,8 @@ void findClosestCentroidIndexAndDistance(std::vector<size_t> &point, std::vector
 	{
 		double dx = point[0] - centroids[i][0];
 		double dy = point[1] - centroids[i][1];
-		dist = dx*dx - dy*dy;
+		dist = dx - dy;
+		dist *= dist;
 		if (dist  < oldDist)
 		{
 			oldDist = dist;
