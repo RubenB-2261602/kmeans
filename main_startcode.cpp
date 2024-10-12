@@ -146,23 +146,21 @@ std::vector<std::vector<double>> makeCentroids(const std::vector<double> &allDat
 
 std::pair<double, int> find_closest_centroid_index_and_distance(const std::vector<double> &point, const std::vector<std::vector<double>> &centroids)
 {
-	double minDistance =std::numeric_limits<double>::max();
-	int centroidIndex = 0;
-	for (int i = 0; i < centroids.size(); i++)
-	{
-		double distance = 0.0;
-		for (int j = 0; j < point.size(); j++)
-		{
-			distance += std::pow(point[j] - centroids[i][j], 2);
-			if (distance < minDistance) {
-				centroidIndex = i;
-				minDistance = std::min(minDistance, distance);
-			}
-		}
-		
-	}
-	
-	return {minDistance, centroidIndex};
+    double minDistance = std::numeric_limits<double>::max();
+    int centroidIndex = 0;
+    for (int i = 0; i < centroids.size(); i++)
+    {
+        double distance = 0.0;
+        for (int j = 0; j < point.size(); j++)
+        {
+            distance += std::pow(point[j] - centroids[i][j], 2);
+        }
+        if (distance < minDistance) {
+            centroidIndex = i;
+            minDistance = distance;
+        }
+    }
+    return {minDistance, centroidIndex};
 }
 
 std::vector<double> average_of_points_with_cluster(int clusterIndex, const std::vector<int> &clusters, const std::vector<double> &allData, size_t numCols)
@@ -260,6 +258,7 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 				
 				std::pair<double, int> distAndIndex = find_closest_centroid_index_and_distance(point, centroids);
 				distanceSquaredSum += distAndIndex.first;
+				//distanceSquaredSum = std::sqrt(distanceSquaredSum);
 
 				if (distAndIndex.second != clusters[p])
 				{
@@ -281,6 +280,15 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 				bestDistSquaredSum = distanceSquaredSum;
 				bestClusters = clusters;
 			}
+
+			if (r == 0 && numSteps == 0)
+			{
+				std::cout << "Printing clusters" << std::endl;
+				clustersDebugFile.write(clusters, "# Clusters:\n");
+			}
+			
+			centroidDebugFile.write(centroids, "# Centroids:\n");
+			
 			++numSteps;
 
 		}
