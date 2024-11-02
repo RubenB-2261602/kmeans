@@ -170,16 +170,32 @@ std::vector<double> average_of_points_with_cluster(int clusterIndex, const std::
 	int count = 0;
 	std::vector<double> averageVector(numCols);
 
-	for (size_t i = 0; i < clusters.size(); i++)
+#pragma omp parallel
 	{
-		if (clusters[i] == clusterIndex)
+		int localCount = 0;
+		std::vector<double> localAverageVector(numCols);
+
+#pragma omp for
+		for (size_t i = 0; i < clusters.size(); i++)
 		{
-			for (int j = 0; j < numCols; j++)
+			if (clusters[i] == clusterIndex)
 			{
-				int index = i * numCols + j;
-				averageVector[j] += allData[index];
+				for (int j = 0; j < numCols; j++)
+				{
+					int index = i * numCols + j;
+					localAverageVector[j] += allData[index];
+				}
+				++localCount;
 			}
-			++count;
+		}
+
+#pragma omp critical
+		{
+			count += localCount;
+			for (int i = 0; i < numCols; i++)
+			{
+				averageVector[i] += localAverageVector[i];
+			}
 		}
 	}
 
@@ -237,14 +253,13 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 	for (int r = 0; r < repetitions; r++)
 	{
 		size_t numSteps = 0;
-		// TODO: perform an actual k-means run, starting from random centroids
-		//       (see rng.h)
 		std::vector<std::vector<double>> centroids(numClusters);
 		std::vector<size_t> clusters_size(numClusters);
 		rng.pickRandomIndices(numRows, clusters_size);
 		std::vector<int> clusters(numRows, -1);
 
-		centroids = makeCentroids(allData, clusters_size, numCols); // vult de centroids met seed
+		// vult de centroids met seed
+		centroids = makeCentroids(allData, clusters_size, numCols);
 
 		bool changed = true;
 		while (changed)
@@ -252,8 +267,10 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 			changed = false;
 			double distanceSquaredSum = 0;
 
-			for (int p = 0; p < numRows; ++p)
+#pragma omp parallel for reduction(+ : distanceSquaredSum)
+			for (int p = 0; p < numRows; ++p) // Find closest centroid for each point
 			{
+				// Create point
 				std::vector<double> point(numCols);
 				for (int i = 0; i < numCols; i++)
 				{
@@ -263,7 +280,6 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 
 				std::pair<double, int> distAndIndex = find_closest_centroid_index_and_distance(point, centroids);
 				distanceSquaredSum += distAndIndex.first;
-				// distanceSquaredSum = std::sqrt(distanceSquaredSum);
 
 				if (distAndIndex.second != clusters[p])
 				{
@@ -272,8 +288,10 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 				}
 			}
 
-			if (changed) // Re-calculate the centroids based on current clustering
+			// Re-calculate the centroids based on current clustering
+			if (changed)
 			{
+				// Don't parralelize this part, because numClusters is small
 				for (int j = 0; j < numClusters; j++)
 				{
 					centroids[j] = average_of_points_with_cluster(j, clusters, allData, numCols);
