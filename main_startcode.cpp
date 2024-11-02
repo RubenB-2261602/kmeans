@@ -6,6 +6,7 @@
 #include "CSVWriter.hpp"
 #include "rng.h"
 #include "timer.h"
+#include <omp.h>
 
 void usage()
 {
@@ -141,26 +142,26 @@ std::vector<std::vector<double>> makeCentroids(const std::vector<double> &allDat
 			centroids[i][j] = allData[indices[i] * numCols + j];
 	}
 	return centroids;
-
 }
 
 std::pair<double, int> find_closest_centroid_index_and_distance(const std::vector<double> &point, const std::vector<std::vector<double>> &centroids)
 {
-    double minDistance = std::numeric_limits<double>::max();
-    int centroidIndex = 0;
-    for (int i = 0; i < centroids.size(); i++)
-    {
-        double distance = 0.0;
-        for (int j = 0; j < point.size(); j++)
-        {
-            distance += std::pow(point[j] - centroids[i][j], 2);
-        }
-        if (distance < minDistance) {
-            centroidIndex = i;
-            minDistance = distance;
-        }
-    }
-    return {minDistance, centroidIndex};
+	double minDistance = std::numeric_limits<double>::max();
+	int centroidIndex = 0;
+	for (int i = 0; i < centroids.size(); i++)
+	{
+		double distance = 0.0;
+		for (int j = 0; j < point.size(); j++)
+		{
+			distance += std::pow(point[j] - centroids[i][j], 2);
+		}
+		if (distance < minDistance)
+		{
+			centroidIndex = i;
+			minDistance = distance;
+		}
+	}
+	return {minDistance, centroidIndex};
 }
 
 std::vector<double> average_of_points_with_cluster(int clusterIndex, const std::vector<int> &clusters, const std::vector<double> &allData, size_t numCols)
@@ -181,13 +182,13 @@ std::vector<double> average_of_points_with_cluster(int clusterIndex, const std::
 			++count;
 		}
 	}
-	
+
 	// divide by count
 	for (int i = 0; i < numCols; i++)
 	{
 		averageVector[i] /= count;
 	}
-	
+
 	return averageVector;
 }
 
@@ -195,6 +196,10 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 		   int numClusters, int repetitions, int numBlocks, int numThreads,
 		   const std::string &centroidDebugFileName, const std::string &clusterDebugFileName)
 {
+
+	// Set number of threads for OpenMP
+	omp_set_num_threads(numThreads);
+
 	// If debug filenames are specified, this opens them. The is_open method
 	// can be used to check if they are actually open and should be written to.
 	FileCSVWriter centroidDebugFile = openDebugFile(centroidDebugFileName);
@@ -215,7 +220,7 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 		return -1;
 	}
 	std::vector<double> allData;
-	size_t numRows , numCols;
+	size_t numRows, numCols;
 	readData(input, allData, numRows, numCols);
 
 	// This is a basic timer from std::chrono ; feel free to use the appropriate timer for
@@ -224,7 +229,7 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 
 	std::vector<int> bestClusters;
 	double bestDistSquaredSum = std::numeric_limits<double>::max(); // can only get better
-	std::vector<size_t> stepsPerRepetition(repetitions); // to save the number of steps each rep needed
+	std::vector<size_t> stepsPerRepetition(repetitions);			// to save the number of steps each rep needed
 
 	// Do the k-means routine a number of times, each time starting from
 	// different random centroids (use Rng::pickRandomIndices), and keep
@@ -232,8 +237,8 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 	for (int r = 0; r < repetitions; r++)
 	{
 		size_t numSteps = 0;
-        // TODO: perform an actual k-means run, starting from random centroids
-        //       (see rng.h)
+		// TODO: perform an actual k-means run, starting from random centroids
+		//       (see rng.h)
 		std::vector<std::vector<double>> centroids(numClusters);
 		std::vector<size_t> clusters_size(numClusters);
 		rng.pickRandomIndices(numRows, clusters_size);
@@ -255,10 +260,10 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 					int index = p * numCols + i;
 					point[i] = allData[index];
 				}
-				
+
 				std::pair<double, int> distAndIndex = find_closest_centroid_index_and_distance(point, centroids);
 				distanceSquaredSum += distAndIndex.first;
-				//distanceSquaredSum = std::sqrt(distanceSquaredSum);
+				// distanceSquaredSum = std::sqrt(distanceSquaredSum);
 
 				if (distAndIndex.second != clusters[p])
 				{
@@ -281,19 +286,16 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 				bestClusters = clusters;
 			}
 
-			if (r == 0 && numSteps == 0)
+			if (r == 0)
 			{
-				std::cout << "Printing clusters" << std::endl;
-				clustersDebugFile.write(clusters, "# Clusters:\n");
+				centroidDebugFile.write(centroids, "# Centroids:\n");
 			}
-			
-			centroidDebugFile.write(centroids, "# Centroids:\n");
-			
-			++numSteps;
+			clustersDebugFile.write(clusters, "# Clusters:\n");
 
+			++numSteps;
 		}
 
-		stepsPerRepetition[r] = numSteps;	
+		stepsPerRepetition[r] = numSteps;
 
 		// Make sure debug logging is only done on first iteration ; subsequent checks
 		// with is_open will indicate that no logging needs to be done anymore.
