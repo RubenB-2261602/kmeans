@@ -267,7 +267,7 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 			changed = false;
 			double distanceSquaredSum = 0;
 
-#pragma omp parallel for reduction(+ : distanceSquaredSum)
+#pragma omp parallel for reduction(+ : distanceSquaredSum) reduction(|| : changed) schedule(static)
 			for (int p = 0; p < numRows; ++p) // Find closest centroid for each point
 			{
 				// Create point
