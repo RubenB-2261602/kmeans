@@ -4,15 +4,23 @@
 # -O3: enables optimizations in the compiler
 
 # Settings for optimized build
-FLAGS=-O3 -DNDEBUG -std=c++14
+FLAGS=-O3 -DNDEBUG -std=c++14 -fopenmp
 
 # Settings for a debug build
 #FLAGS=-g -std=c++14
 
+ifeq ($(OS), Windows_NT)
+    RM = del
+    EXT = .exe
+else
+    RM = rm
+    EXECUTABLE = 
+endif
+
 all: kmeans
 
 clean:
-	rm -f kmeans
+	$(RM) kmeans$(EXT)
 
 kmeans: main_startcode.cpp rng.cpp
-	$(CXX) $(FLAGS) -o kmeans main_startcode.cpp rng.cpp
+	$(CXX) $(FLAGS) -o kmeans$(EXT) main_startcode.cpp rng.cpp

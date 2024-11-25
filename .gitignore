@@ -1,3 +1,6 @@
 .vscode
 .idea
+.vs
 *.csv
+kmeans
+kmeans.exe
