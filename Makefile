@@ -4,7 +4,7 @@
 # -O3: enables optimizations in the compiler
 
 # Settings for optimized build
-FLAGS=-O3 -DNDEBUG -std=c++14 -fopenmp
+FLAGS=-O3 -DNDEBUG -std=c++14
 
 # Settings for a debug build
 #FLAGS=-g -std=c++14
@@ -22,5 +22,5 @@ all: kmeans
 clean:
 	$(RM) kmeans$(EXT)
 
-kmeans: main_startcode.cpp rng.cpp
-	$(CXX) $(FLAGS) -o kmeans$(EXT) main_startcode.cpp rng.cpp
+kmeans: main_startcode.cpp rng.cpp kmeans.cu
+	nvcc $(FLAGS) -o kmeans$(EXT) main_startcode.cpp rng.cpp kmeans.cu
