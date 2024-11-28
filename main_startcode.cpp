@@ -8,7 +8,8 @@
 #include <omp.h>
 #include <string>
 
-void usage() {
+void usage()
+{
   std::cerr << R"XYZ(
 Usage:
 
@@ -84,7 +85,8 @@ Arguments:
 // Helper function to read input file into allData, setting number of detected
 // rows and columns. Feel free to use, adapt or ignore
 void readData(std::ifstream &input, std::vector<double> &allData,
-              size_t &numRows, size_t &numCols) {
+              size_t &numRows, size_t &numCols)
+{
   if (!input.is_open())
     throw std::runtime_error("Input file is not open");
 
@@ -97,12 +99,15 @@ void readData(std::ifstream &input, std::vector<double> &allData,
   int line = 1;
   std::vector<double> row;
 
-  while (inReader.read(row)) {
-    if (numColsExpected == -1) {
+  while (inReader.read(row))
+  {
+    if (numColsExpected == -1)
+    {
       numColsExpected = row.size();
       if (numColsExpected <= 0)
         throw std::runtime_error("Unexpected error: 0 columns");
-    } else if (numColsExpected != (int)row.size())
+    }
+    else if (numColsExpected != (int)row.size())
       throw std::runtime_error("Incompatible number of colums read in line " +
                                std::to_string(line) + ": expecting " +
                                std::to_string(numColsExpected) + " but got " +
@@ -118,10 +123,12 @@ void readData(std::ifstream &input, std::vector<double> &allData,
   numCols = (size_t)numColsExpected;
 }
 
-FileCSVWriter openDebugFile(const std::string &n) {
+FileCSVWriter openDebugFile(const std::string &n)
+{
   FileCSVWriter f;
 
-  if (n.length() != 0) {
+  if (n.length() != 0)
+  {
     f.open(n);
     if (!f.is_open())
       std::cerr << "WARNING: Unable to open debug file " << n << std::endl;
@@ -131,9 +138,11 @@ FileCSVWriter openDebugFile(const std::string &n) {
 
 std::vector<std::vector<double>>
 makeCentroids(const std::vector<double> &allData,
-              const std::vector<size_t> &indices, size_t numCols) {
+              const std::vector<size_t> &indices, size_t numCols)
+{
   std::vector<std::vector<double>> centroids(indices.size());
-  for (size_t i = 0; i < indices.size(); i++) {
+  for (size_t i = 0; i < indices.size(); i++)
+  {
     centroids[i].resize(numCols);
     for (size_t j = 0; j < numCols; j++)
       centroids[i][j] = allData[indices[i] * numCols + j];
@@ -143,15 +152,19 @@ makeCentroids(const std::vector<double> &allData,
 
 std::pair<double, int> find_closest_centroid_index_and_distance(
     const std::vector<double> &point,
-    const std::vector<std::vector<double>> &centroids) {
+    const std::vector<std::vector<double>> &centroids)
+{
   double minDistance = std::numeric_limits<double>::max();
   int centroidIndex = 0;
-  for (int i = 0; i < centroids.size(); i++) {
+  for (int i = 0; i < centroids.size(); i++)
+  {
     double distance = 0.0;
-    for (int j = 0; j < point.size(); j++) {
+    for (int j = 0; j < point.size(); j++)
+    {
       distance += std::pow(point[j] - centroids[i][j], 2);
     }
-    if (distance < minDistance) {
+    if (distance < minDistance)
+    {
       centroidIndex = i;
       minDistance = distance;
     }
@@ -161,54 +174,18 @@ std::pair<double, int> find_closest_centroid_index_and_distance(
 
 std::vector<double> average_of_points_with_cluster(
     int clusterIndex, const std::vector<int> &clusters,
-    const std::vector<double> &allData, size_t numCols) {
-  // 	double average = 0;
-  // 	int count = 0;
-  // 	std::vector<double> averageVector(numCols);
-
-  // #pragma omp parallel
-  // 	{
-  // 		int localCount = 0;
-  // 		std::vector<double> localAverageVector(numCols);
-
-  // #pragma omp for
-  // 		for (size_t i = 0; i < clusters.size(); i++)
-  // 		{
-  // 			if (clusters[i] == clusterIndex)
-  // 			{
-  // 				for (int j = 0; j < numCols; j++)
-  // 				{
-  // 					int index = i * numCols + j;
-  // 					localAverageVector[j] += allData[index];
-  // 				}
-  // 				++localCount;
-  // 			}
-  // 		}
-
-  // #pragma omp critical
-  // 		{
-  // 			count += localCount;
-  // 			for (int i = 0; i < numCols; i++)
-  // 			{
-  // 				averageVector[i] += localAverageVector[i];
-  // 			}
-  // 		}
-  // 	}
-
-  // 	// divide by count
-  // 	for (int i = 0; i < numCols; i++)
-  // 	{
-  // 		averageVector[i] /= count;
-  // 	}
-
-  // 	return averageVector;
+    const std::vector<double> &allData, size_t numCols)
+{
   double average = 0;
   int count = 0;
   std::vector<double> averageVector(numCols);
 
-  for (size_t i = 0; i < clusters.size(); i++) {
-    if (clusters[i] == clusterIndex) {
-      for (int j = 0; j < numCols; j++) {
+  for (size_t i = 0; i < clusters.size(); i++)
+  {
+    if (clusters[i] == clusterIndex)
+    {
+      for (int j = 0; j < numCols; j++)
+      {
         int index = i * numCols + j;
         averageVector[j] += allData[index];
       }
@@ -217,7 +194,8 @@ std::vector<double> average_of_points_with_cluster(
   }
 
   // divide by count
-  for (int i = 0; i < numCols; i++) {
+  for (int i = 0; i < numCols; i++)
+  {
     averageVector[i] /= count;
   }
 
@@ -228,7 +206,8 @@ int kmeans(Rng &rng, const std::string &inputFile,
            const std::string &outputFileName, int numClusters, int repetitions,
            int numBlocks, int numThreads,
            const std::string &centroidDebugFileName,
-           const std::string &clusterDebugFileName) {
+           const std::string &clusterDebugFileName)
+{
 
   // Set number of threads for OpenMP
   omp_set_num_threads(numThreads);
@@ -239,14 +218,16 @@ int kmeans(Rng &rng, const std::string &inputFile,
   FileCSVWriter clustersDebugFile = openDebugFile(clusterDebugFileName);
 
   FileCSVWriter csvOutputFile(outputFileName);
-  if (!csvOutputFile.is_open()) {
+  if (!csvOutputFile.is_open())
+  {
     std::cerr << "Unable to open output file " << outputFileName << std::endl;
     return -1;
   }
 
   // Load dataset
   std::ifstream input(inputFile);
-  if (!input.is_open()) {
+  if (!input.is_open())
+  {
     std::cerr << "UnablenumCols to open input file " << inputFile << std::endl;
     return -1;
   }
@@ -267,7 +248,8 @@ int kmeans(Rng &rng, const std::string &inputFile,
   // Do the k-means routine a number of times, each time starting from
   // different random centroids (use Rng::pickRandomIndices), and keep
   // the best result of these repetitions.
-  for (int r = 0; r < repetitions; r++) {
+  for (int r = 0; r < repetitions; r++)
+  {
     size_t numSteps = 0;
     std::vector<std::vector<double>> centroids(numClusters);
     std::vector<size_t> clusters_size(numClusters);
@@ -278,17 +260,17 @@ int kmeans(Rng &rng, const std::string &inputFile,
     centroids = makeCentroids(allData, clusters_size, numCols);
 
     bool changed = true;
-    while (changed) {
+    while (changed)
+    {
       changed = false;
       double distanceSquaredSum = 0;
 
-#pragma omp parallel for reduction(+ : distanceSquaredSum)                     \
-    reduction(|| : changed) schedule(static)
       for (int p = 0; p < numRows; ++p) // Find closest centroid for each point
       {
         // Create point
         std::vector<double> point(numCols);
-        for (int i = 0; i < numCols; i++) {
+        for (int i = 0; i < numCols; i++)
+        {
           int index = p * numCols + i;
           point[i] = allData[index];
         }
@@ -297,27 +279,32 @@ int kmeans(Rng &rng, const std::string &inputFile,
             find_closest_centroid_index_and_distance(point, centroids);
         distanceSquaredSum += distAndIndex.first;
 
-        if (distAndIndex.second != clusters[p]) {
+        if (distAndIndex.second != clusters[p])
+        {
           clusters[p] = distAndIndex.second;
           changed = true;
         }
       }
 
       // Re-calculate the centroids based on current clustering
-      if (changed) {
+      if (changed)
+      {
         // Don't parralelize this part, because numClusters is small
-        for (int j = 0; j < numClusters; j++) {
+        for (int j = 0; j < numClusters; j++)
+        {
           centroids[j] =
               average_of_points_with_cluster(j, clusters, allData, numCols);
         }
       }
 
-      if (distanceSquaredSum < bestDistSquaredSum) {
+      if (distanceSquaredSum < bestDistSquaredSum)
+      {
         bestDistSquaredSum = distanceSquaredSum;
         bestClusters = clusters;
       }
 
-      if (r == 0) {
+      if (r == 0)
+      {
         centroidDebugFile.write(centroids, "# Centroids:\n");
       }
       clustersDebugFile.write(clusters, "# Clusters:\n");
@@ -355,7 +342,8 @@ int kmeans(Rng &rng, const std::string &inputFile,
   return 0;
 }
 
-int mainCxx(const std::vector<std::string> &args) {
+int mainCxx(const std::vector<std::string> &args)
+{
   if (args.size() % 2 != 0)
     usage();
 
@@ -365,7 +353,8 @@ int mainCxx(const std::vector<std::string> &args) {
 
   int numClusters = -1, repetitions = -1;
   int numBlocks = 1, numThreads = 1;
-  for (int i = 0; i < args.size(); i += 2) {
+  for (int i = 0; i < args.size(); i += 2)
+  {
     if (args[i] == "--input")
       inputFileName = args[i + 1];
     else if (args[i] == "--output")
@@ -384,7 +373,8 @@ int mainCxx(const std::vector<std::string> &args) {
       numBlocks = stoi(args[i + 1]);
     else if (args[i] == "--threads")
       numThreads = stoi(args[i + 1]);
-    else {
+    else
+    {
       std::cerr << "Unknown argument '" << args[i] << "'" << std::endl;
       return -1;
     }
@@ -401,7 +391,8 @@ int mainCxx(const std::vector<std::string> &args) {
                 clusterTraceFileName);
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   std::vector<std::string> args;
   for (int i = 1; i < argc; i++)
     args.push_back(argv[i]);
