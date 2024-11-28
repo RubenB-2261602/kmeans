@@ -1,22 +1,13 @@
-#include "kmeans.cuh"
+#ifndef MY_CUDA_FILE_H
+#define MY_CUDA_FILE_H
 
-#include <vector>
-
-__global__ void assignPointstoCentroid(
+void assignPointstoCentroid(
     const double *points,
     const double *centroids,
-    const int numPoints)
-{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (idx < numPoints)
-    {
-    }
-}
+    const int numPoints);
 
 void calculateDistance(std::vector<std::vector<double>> &points,
                        std::vector<std::vector<double>> &centroids,
                        std::vector<std::pair<double, int>> &distancesAndIndex)
-{
-    // TODO: Implement this function for cude
-}
+
+#endif
