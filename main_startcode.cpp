@@ -228,6 +228,7 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
   double bestDistSquaredSum = std::numeric_limits<double>::max(); // can only get better
   std::vector<size_t> stepsPerRepetition(repetitions);            // to save the number of steps each rep needed
 
+
   // Do the k-means routine a number of times, each time starting from
   // different random centroids (use Rng::pickRandomIndices), and keep
   // the best result of these repetitions.
@@ -262,16 +263,16 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
       }
 
       std::vector<std::pair<double, int>> distancesAndIndex(numRows, std::make_pair(0, 0));
-      calculateDistance(points, centroids, distancesAndIndex);
+      calculateDistance(points, centroids, distancesAndIndex, numBlocks, numThreads);
 
       int counter = 0;
-      for (auto &&distanceAndIndex : distancesAndIndex)
+      for (auto &&distanceAndIndex : distancesAndIndex) 
       {
         distanceSquaredSum += distanceAndIndex.first;
-
         if (distanceAndIndex.second != clusters[counter])
         {
           clusters[counter] = distanceAndIndex.second;
+          //std::cout << "Changed cluster for point " << counter << " to " << distanceAndIndex.second << std::endl;
           changed = true;
         }
 
