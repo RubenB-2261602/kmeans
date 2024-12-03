@@ -232,84 +232,61 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
   // Do the k-means routine a number of times, each time starting from
   // different random centroids (use Rng::pickRandomIndices), and keep
   // the best result of these repetitions.
-  for (int r = 0; r < repetitions; r++)
-  {
+  for (int r = 0; r < repetitions; r++) {
     size_t numSteps = 0;
-    // TODO: perform an actual k-means run, starting from random centroids
-    //       (see rng.h)
     std::vector<std::vector<double>> centroids(numClusters);
     std::vector<size_t> clusters_size(numClusters);
     rng.pickRandomIndices(numRows, clusters_size);
     std::vector<int> clusters(numRows, -1);
 
-    centroids = makeCentroids(allData, clusters_size, numCols); // vult de centroids met seed
+    centroids = makeCentroids(allData, clusters_size, numCols);
 
     bool changed = true;
-    while (changed)
-    {
-      changed = false;
-      double distanceSquaredSum = 0;
-      std::vector<std::vector<double>> points(numRows, std::vector<double>(numCols, 0));
+    while (changed) {
+        changed = false;
+        double distanceSquaredSum = 0;
 
-      for (int p = 0; p < numRows; ++p)
-      {
-        std::vector<double> point(numCols);
-        for (int i = 0; i < numCols; i++)
-        {
-          int index = p * numCols + i;
-          point[i] = allData[index];
-        }
-        points[p] = point;
-      }
+        std::vector<std::pair<double, int>> distancesAndIndex(numRows, std::make_pair(0, 0));
+        calculateDistance(allData, centroids, distancesAndIndex, numBlocks, numThreads);
 
-      std::vector<std::pair<double, int>> distancesAndIndex(numRows, std::make_pair(0, 0));
-      calculateDistance(points, centroids, distancesAndIndex, numBlocks, numThreads);
-
-      int counter = 0;
-      for (auto &&distanceAndIndex : distancesAndIndex) 
-      {
-        distanceSquaredSum += distanceAndIndex.first;
-        if (distanceAndIndex.second != clusters[counter])
-        {
-          clusters[counter] = distanceAndIndex.second;
-          //std::cout << "Changed cluster for point " << counter << " to " << distanceAndIndex.second << std::endl;
-          changed = true;
+        int counter = 0;
+        for (auto &&distanceAndIndex : distancesAndIndex) {
+            distanceSquaredSum += distanceAndIndex.first;
+            if (distanceAndIndex.second != clusters[counter]) {
+                clusters[counter] = distanceAndIndex.second;
+                changed = true;
+            }
+            counter++;
         }
 
-        if (changed) // Re-calculate the centroids based on current clustering
-        {
-          for (int j = 0; j < numClusters; j++)
-          {
-            centroids[j] = average_of_points_with_cluster(j, clusters, allData, numCols);
-          }
+        if (changed) { // Re-calculate the centroids based on current clustering
+            for (int j = 0; j < numClusters; j++) {
+                centroids[j] = average_of_points_with_cluster(j, clusters, allData, numCols);
+            }
         }
 
-        if (distanceSquaredSum < bestDistSquaredSum)
-        {
-          bestDistSquaredSum = distanceSquaredSum;
-          bestClusters = clusters;
+        if (distanceSquaredSum < bestDistSquaredSum) {
+            bestDistSquaredSum = distanceSquaredSum;
+            bestClusters = clusters;
         }
-        counter++;
-      }
 
-      if (r == 0 && numSteps == 0)
-      {
-        std::cout << "Printing clusters" << std::endl;
-        clustersDebugFile.write(clusters, "# Clusters:\n");
-      }
+        if (r == 0 && numSteps == 0) {
+            std::cout << "Printing clusters" << std::endl;
+            clustersDebugFile.write(clusters, "# Clusters:\n");
+        }
 
-      centroidDebugFile.write(centroids, "# Centroids:\n");
+        centroidDebugFile.write(centroids, "# Centroids:\n");
 
-      ++numSteps;
+        ++numSteps;
     }
 
     stepsPerRepetition[r] = numSteps;
 
-    // Make sure debug logging is only done on first iteration ; subsequent checks
+    // Make sure debug logging is only done on first iteration; subsequent checks
     // with is_open will indicate that no logging needs to be done anymore.
     centroidDebugFile.close();
     clustersDebugFile.close();
-  }
+}
 
   timer.stop();
 
