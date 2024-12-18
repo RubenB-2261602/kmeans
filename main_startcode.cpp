@@ -228,6 +228,10 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
   double bestDistSquaredSum = std::numeric_limits<double>::max(); // can only get better
   std::vector<size_t> stepsPerRepetition(repetitions);            // to save the number of steps each rep needed
 
+  size_t numPoints = allData.size() / numCols;
+  CudaKMeans cudaManager(numPoints, numClusters, numCols);
+  cudaManager.copyPointsToDevice(allData);
+
   // Do the k-means routine a number of times, each time starting from
   // different random centroids (use Rng::pickRandomIndices), and keep
   // the best result of these repetitions.
@@ -241,26 +245,28 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 
     centroids = makeCentroids(allData, clusters_size, numCols);
 
+    std::vector<std::vector<double>> currentCentroids = centroids; // Use a separate copy for calculations
+    cudaManager.copyCentroidsToDevice(currentCentroids);
+
     bool changed = true;
     while (changed)
     {
       changed = false;
       double distanceSquaredSum = 0;
+      
+      std::vector<std::pair<double, int>> distancesAndIndices;
+      cudaManager.assignCentroids(numBlocks, numThreads, distancesAndIndices);
 
-      std::vector<std::pair<double, int>> distancesAndIndex(numRows, std::make_pair(0, 0));
-      calculateDistance(allData, centroids, distancesAndIndex, numBlocks, numThreads);
-
-      int counter = 0;
-      for (auto &&distanceAndIndex : distancesAndIndex)
+      for (size_t i = 0; i < numPoints; ++i)
       {
-        distanceSquaredSum += distanceAndIndex.first;
-        if (distanceAndIndex.second != clusters[counter])
-        {
-          clusters[counter] = distanceAndIndex.second;
-          changed = true;
-        }
-        counter++;
+          distanceSquaredSum += distancesAndIndices[i].first;
+          if (distancesAndIndices[i].second != clusters[i])
+          {
+              clusters[i] = distancesAndIndices[i].second;
+              changed = true;
+          }
       }
+
 
       if (changed)
       { // Re-calculate the centroids based on current clustering
