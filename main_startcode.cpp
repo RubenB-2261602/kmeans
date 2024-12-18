@@ -228,11 +228,11 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
   double bestDistSquaredSum = std::numeric_limits<double>::max(); // can only get better
   std::vector<size_t> stepsPerRepetition(repetitions);            // to save the number of steps each rep needed
 
-
   // Do the k-means routine a number of times, each time starting from
   // different random centroids (use Rng::pickRandomIndices), and keep
   // the best result of these repetitions.
-  for (int r = 0; r < repetitions; r++) {
+  for (int r = 0; r < repetitions; r++)
+  {
     size_t numSteps = 0;
     std::vector<std::vector<double>> centroids(numClusters);
     std::vector<size_t> clusters_size(numClusters);
@@ -242,42 +242,49 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
     centroids = makeCentroids(allData, clusters_size, numCols);
 
     bool changed = true;
-    while (changed) {
-        changed = false;
-        double distanceSquaredSum = 0;
+    while (changed)
+    {
+      changed = false;
+      double distanceSquaredSum = 0;
 
-        std::vector<std::pair<double, int>> distancesAndIndex(numRows, std::make_pair(0, 0));
-        calculateDistance(allData, centroids, distancesAndIndex, numBlocks, numThreads);
+      std::vector<std::pair<double, int>> distancesAndIndex(numRows, std::make_pair(0, 0));
+      calculateDistance(allData, centroids, distancesAndIndex, numBlocks, numThreads);
 
-        int counter = 0;
-        for (auto &&distanceAndIndex : distancesAndIndex) {
-            distanceSquaredSum += distanceAndIndex.first;
-            if (distanceAndIndex.second != clusters[counter]) {
-                clusters[counter] = distanceAndIndex.second;
-                changed = true;
-            }
-            counter++;
+      int counter = 0;
+      for (auto &&distanceAndIndex : distancesAndIndex)
+      {
+        distanceSquaredSum += distanceAndIndex.first;
+        if (distanceAndIndex.second != clusters[counter])
+        {
+          clusters[counter] = distanceAndIndex.second;
+          changed = true;
         }
+        counter++;
+      }
 
-        if (changed) { // Re-calculate the centroids based on current clustering
-            for (int j = 0; j < numClusters; j++) {
-                centroids[j] = average_of_points_with_cluster(j, clusters, allData, numCols);
-            }
+      if (changed)
+      { // Re-calculate the centroids based on current clustering
+        for (int j = 0; j < numClusters; j++)
+        {
+          centroids[j] = average_of_points_with_cluster(j, clusters, allData, numCols);
         }
+      }
 
-        if (distanceSquaredSum < bestDistSquaredSum) {
-            bestDistSquaredSum = distanceSquaredSum;
-            bestClusters = clusters;
-        }
+      if (distanceSquaredSum < bestDistSquaredSum)
+      {
+        bestDistSquaredSum = distanceSquaredSum;
+        bestClusters = clusters;
+      }
 
-        if (r == 0 && numSteps == 0) {
-            std::cout << "Printing clusters" << std::endl;
-            clustersDebugFile.write(clusters, "# Clusters:\n");
-        }
+      if (r == 0 && numSteps == 0)
+      {
+        std::cout << "Printing clusters" << std::endl;
+        clustersDebugFile.write(clusters, "# Clusters:\n");
+      }
 
-        centroidDebugFile.write(centroids, "# Centroids:\n");
+      centroidDebugFile.write(centroids, "# Centroids:\n");
 
-        ++numSteps;
+      ++numSteps;
     }
 
     stepsPerRepetition[r] = numSteps;
@@ -286,13 +293,13 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
     // with is_open will indicate that no logging needs to be done anymore.
     centroidDebugFile.close();
     clustersDebugFile.close();
-}
+  }
 
   timer.stop();
 
   // Some example output, of course you can log your timing data anyway you like.
   std::cerr << "# Type,blocks,threads,file,seed,clusters,repetitions,bestdistsquared,timeinseconds" << std::endl;
-  std::cout << "sequential," << numBlocks << "," << numThreads << "," << inputFile << ","
+  std::cout << "CUDA," << numBlocks << "," << numThreads << "," << inputFile << ","
             << rng.getUsedSeed() << "," << numClusters << ","
             << repetitions << "," << bestDistSquaredSum << "," << timer.durationNanoSeconds() / 1e9
             << std::endl;
