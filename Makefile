@@ -9,18 +9,10 @@ FLAGS=-O3 -DNDEBUG -std=c++14
 # Settings for a debug build
 #FLAGS=-g -std=c++14
 
-ifeq ($(OS), Windows_NT)
-    RM = del
-    EXT = .exe
-else
-    RM = rm
-    EXECUTABLE = 
-endif
-
 all: kmeans
 
 clean:
-	$(RM) kmeans$(EXT)
+	rm -f kmeans
 
-kmeans: main_startcode.cpp rng.cpp kmeans.cu
-	nvcc $(FLAGS) -o kmeans$(EXT) main_startcode.cpp rng.cpp kmeans.cu
+kmeans: main_startcode.cpp rng.cpp
+	$(CXX) $(FLAGS) -o kmeans main_startcode.cpp rng.cpp
