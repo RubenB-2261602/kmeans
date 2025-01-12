@@ -1,18 +1,10 @@
-# -std=c++14: we're limiting ourselves to c++14, since that's what the 
-#             GCC compiler on the VSC supports.
-# -DNDEBUG: turns off e.g. assertion checks
-# -O3: enables optimizations in the compiler
+CXX=mpic++
+CXXFLAGS=-O3 -Wall -std=c++17
 
-# Settings for optimized build
-FLAGS=-O3 -DNDEBUG -std=c++14
+all: kmeans_mpi
 
-# Settings for a debug build
-#FLAGS=-g -std=c++14
-
-all: kmeans
+kmeans_mpi: main_startcode.cpp CSVReader.hpp CSVWriter.hpp rng.h timer.h
+	$(CXX) $(CXXFLAGS) -o kmeans_mpi main_startcode.cpp
 
 clean:
-	rm -f kmeans
-
-kmeans: main_startcode.cpp rng.cpp
-	$(CXX) $(FLAGS) -o kmeans main_startcode.cpp rng.cpp
+	rm -f kmeans_mpi

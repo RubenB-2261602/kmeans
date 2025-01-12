@@ -197,7 +197,6 @@ int kmeans(Rng& rng, const std::string& inputFile, const std::string& outputFile
 	int numClusters, int repetitions, int numBlocks, int numThreads,
 	const std::string& centroidDebugFileName, const std::string& clusterDebugFileName)
 {
-	// Defined here so bottom calls can use it, if this is in an if for rank 0, it will not be available
 	FileCSVWriter centroidDebugFile = openDebugFile(centroidDebugFileName);
 	FileCSVWriter clustersDebugFile = openDebugFile(clusterDebugFileName);
 	FileCSVWriter csvOutputFile(outputFileName);
@@ -211,130 +210,201 @@ int kmeans(Rng& rng, const std::string& inputFile, const std::string& outputFile
 	std::cout << "Ready: " << name << " " << rank << " of " << size << std::endl;
 
 	std::vector<double> allData;
-	size_t numRows, numCols;
+	size_t numRows = 0, numCols = 0;
+
+	// Only rank 0 reads the data
 	if (rank == 0)
 	{
 		if (!csvOutputFile.is_open())
 		{
 			std::cerr << "Unable to open output file " << outputFileName << std::endl;
+			MPI_Abort(MPI_COMM_WORLD, -1);
 			return -1;
 		}
 
-		// Load dataset
 		std::ifstream input(inputFile);
 		if (!input.is_open())
 		{
-			std::cerr << "UnablenumCols to open input file " << inputFile << std::endl;
+			std::cerr << "Unable to open input file " << inputFile << std::endl;
+			MPI_Abort(MPI_COMM_WORLD, -1);
 			return -1;
 		}
-	readData(input, allData, numRows, numCols);
+		readData(input, allData, numRows, numCols);
 	}
 
-	Timer timer;
+	// Broadcast dimensions to all processes
+	MPI_Bcast(&numRows, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+	MPI_Bcast(&numCols, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
 
+	// Calculate points per process and remainder
 	int pointsPerProcess = numRows / size;
-	std::cout << pointsPerProcess << std::endl;
-	std::cout << numRows << " / " << size << std::endl;
-	std::vector<double> localData(pointsPerProcess * numCols);
-	MPI_Request request;
-	
-	if (rank == 0)
-	{
-	std::cout << "Scattering data" << std::endl;
-	MPI_Iscatter(allData.data(), pointsPerProcess * numCols, MPI_DOUBLE, localData.data(), pointsPerProcess * numCols, MPI_DOUBLE, 0, MPI_COMM_WORLD, &request);
-	}
+	int remainder = numRows % size;
+	int localPoints = pointsPerProcess + (rank < remainder ? 1 : 0);
+	int offset = rank * pointsPerProcess + std::min(rank, remainder);
 
-	std::vector<std::vector<double>> localPoints(pointsPerProcess, std::vector<double>(numCols));
-	for (int i = 0; i < pointsPerProcess; i++)
-	{
-		for (int j = 0; j < numCols; j++)
-		{
-			localPoints[i][j] = localData[i * numCols + j];
+	// Allocate local data arrays
+	std::vector<double> localData(localPoints * numCols);
+	std::vector<int> localClusters(localPoints, -1);
+	std::vector<int> clusters(numRows, -1);
+
+	// Distribute data using MPI_Scatterv
+	std::vector<int> sendcounts(size);
+	std::vector<int> displs(size);
+	if (rank == 0) {
+		for (int i = 0; i < size; i++) {
+			sendcounts[i] = (pointsPerProcess + (i < remainder ? 1 : 0)) * numCols;
+			displs[i] = (i * pointsPerProcess + std::min(i, remainder)) * numCols;
 		}
 	}
 
+	MPI_Scatterv(allData.data(), sendcounts.data(), displs.data(), MPI_DOUBLE,
+				localData.data(), localPoints * numCols, MPI_DOUBLE,
+				0, MPI_COMM_WORLD);
 
+	Timer timer;
 	std::vector<int> bestClusters;
 	double bestDistSquaredSum = std::numeric_limits<double>::max();
-	double globalDistSquaredSum = 0;
 	std::vector<size_t> stepsPerRepetition(repetitions);
 
 	for (int r = 0; r < repetitions; r++)
 	{
 		size_t numSteps = 0;
-		std::vector<std::vector<double>> centroids(numClusters);
-		std::vector<size_t> clusters_size(numClusters);
-		rng.pickRandomIndices(numRows, clusters_size);
-		std::vector<int> clusters(numRows, -1);
-		std::vector<int> localClusters(pointsPerProcess, -1);
+		std::vector<std::vector<double>> centroids(numClusters, std::vector<double>(numCols));
+		std::vector<size_t> centroidIndices(numClusters);
 
-		centroids = makeCentroids(allData, clusters_size, numCols);
-		MPI_Bcast(centroids.data(), numClusters * numCols, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+		if (rank == 0) {
+			rng.pickRandomIndices(numRows, centroidIndices);
+			for (int i = 0; i < numClusters; i++) {
+				for (size_t j = 0; j < numCols; j++) {
+					centroids[i][j] = allData[centroidIndices[i] * numCols + j];
+				}
+			}
+		}
+
+		// Broadcast initial centroids
+		for (int i = 0; i < numClusters; i++) {
+			MPI_Bcast(centroids[i].data(), numCols, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+		}
 
 		bool globalChanged = true;
 		while (globalChanged)
 		{
 			globalChanged = false;
-			double distanceSquaredSum = 0;
+			double localDistSquaredSum = 0.0;
 
-			for (int p = 0; p < localPoints.size(); ++p)
+			// Find closest centroids for local points
+			for (int p = 0; p < localPoints; p++)
 			{
-				std::cout << "Name: " << name << " Point: " << p << std::endl;
-				std::pair<double, int> distAndIndex = find_closest_centroid_index_and_distance(localPoints[p], centroids);
-				distanceSquaredSum += distAndIndex.first;
-
-				if (distAndIndex.second != clusters[p])
-				{
-					localClusters[p] = distAndIndex.second;
-					bool changed = true;
-					MPI_Allreduce(&changed, &globalChanged, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
+				std::vector<double> point(numCols);
+				for (size_t j = 0; j < numCols; j++) {
+					point[j] = localData[p * numCols + j];
 				}
-			}
-			MPI_Reduce(&distanceSquaredSum, &globalDistSquaredSum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-			MPI_Gather(localClusters.data(), pointsPerProcess, MPI_INT, clusters.data(), pointsPerProcess, MPI_INT, 0, MPI_COMM_WORLD);
 
-			if (globalChanged && rank == 0)
-			{
-				for (int j = 0; j < numClusters; j++)
+				auto [dist, newCluster] = find_closest_centroid_index_and_distance(point, centroids);
+				localDistSquaredSum += dist;
+
+				if (newCluster != localClusters[p])
 				{
-					centroids[j] = average_of_points_with_cluster(j, clusters, allData, numCols);
+					localClusters[p] = newCluster;
+					globalChanged = true;
 				}
 			}
 
-			if (distanceSquaredSum < bestDistSquaredSum)
-			{
-				bestDistSquaredSum = distanceSquaredSum;
-				bestClusters = clusters;
+			// Combine results
+			bool anyChanged;
+			MPI_Allreduce(&globalChanged, &anyChanged, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
+			globalChanged = anyChanged;
+
+			double globalDistSquaredSum;
+			MPI_Reduce(&localDistSquaredSum, &globalDistSquaredSum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+			// Gather all clusters
+			std::vector<int> recvcounts(size);
+			std::vector<int> displs(size);
+			if (rank == 0) {
+				for (int i = 0; i < size; i++) {
+					recvcounts[i] = pointsPerProcess + (i < remainder ? 1 : 0);
+					displs[i] = i * pointsPerProcess + std::min(i, remainder);
+				}
 			}
 
-			if (r == 0 && numSteps == 0 && rank == 0)
+			MPI_Gatherv(localClusters.data(), localPoints, MPI_INT,
+						clusters.data(), recvcounts.data(), displs.data(), MPI_INT,
+						0, MPI_COMM_WORLD);
+
+			if (globalChanged)
 			{
-				std::cout << "Printing clusters" << std::endl;
-				clustersDebugFile.write(clusters, "# Clusters:\n");
+				// Calculate new centroids in parallel
+				std::vector<std::vector<double>> localSums(numClusters, std::vector<double>(numCols, 0.0));
+				std::vector<int> localCounts(numClusters, 0);
+
+				for (int p = 0; p < localPoints; p++)
+				{
+					int cluster = localClusters[p];
+					localCounts[cluster]++;
+					for (size_t j = 0; j < numCols; j++) {
+						localSums[cluster][j] += localData[p * numCols + j];
+					}
+				}
+
+				// Reduce sums and counts
+				std::vector<std::vector<double>> globalSums(numClusters, std::vector<double>(numCols, 0.0));
+				std::vector<int> globalCounts(numClusters, 0);
+
+				for (int i = 0; i < numClusters; i++) {
+					MPI_Allreduce(localSums[i].data(), globalSums[i].data(), numCols, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+					MPI_Allreduce(&localCounts[i], &globalCounts[i], 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+				}
+
+				// Update centroids
+				for (int i = 0; i < numClusters; i++) {
+					if (globalCounts[i] > 0) {
+						for (size_t j = 0; j < numCols; j++) {
+							centroids[i][j] = globalSums[i][j] / globalCounts[i];
+						}
+					}
+				}
 			}
 
-			centroidDebugFile.write(centroids, "# Centroids:\n");
+			if (rank == 0)
+			{
+				if (globalDistSquaredSum < bestDistSquaredSum)
+				{
+					bestDistSquaredSum = globalDistSquaredSum;
+					bestClusters = clusters;
+				}
 
-			++numSteps;
+				if (r == 0 && numSteps == 0)
+				{
+					clustersDebugFile.write(clusters, "# Clusters:\n");
+				}
 
+				centroidDebugFile.write(centroids, "# Centroids:\n");
+			}
+
+			numSteps++;
 		}
 
-		stepsPerRepetition[r] = numSteps;
-
-		centroidDebugFile.close();
-		clustersDebugFile.close();
+		if (rank == 0)
+		{
+			stepsPerRepetition[r] = numSteps;
+		}
 	}
 
 	timer.stop();
 
-	std::cerr << "# Type,blocks,threads,file,seed,clusters,repetitions,bestdistsquared,timeinseconds" << std::endl;
-	std::cout << "mpi," << numBlocks << "," << numThreads << "," << inputFile << ","
-		<< rng.getUsedSeed() << "," << numClusters << ","
-		<< repetitions << "," << bestDistSquaredSum << "," << timer.durationNanoSeconds() / 1e9
-		<< std::endl;
+	if (rank == 0)
+	{
+		std::cerr << "# Type,blocks,threads,file,seed,clusters,repetitions,bestdistsquared,timeinseconds" << std::endl;
+		std::cout << "mpi," << numBlocks << "," << numThreads << "," << inputFile << ","
+			<< rng.getUsedSeed() << "," << numClusters << ","
+			<< repetitions << "," << bestDistSquaredSum << "," << timer.durationNanoSeconds() / 1e9
+			<< std::endl;
 
-	csvOutputFile.write(stepsPerRepetition, "# Steps: ");
-	csvOutputFile.write(bestClusters);
+		csvOutputFile.write(stepsPerRepetition, "# Steps: ");
+		csvOutputFile.write(bestClusters);
+	}
+
 	MPI_Finalize();
 	return 0;
 }
