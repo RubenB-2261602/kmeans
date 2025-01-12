@@ -132,28 +132,27 @@ FileCSVWriter openDebugFile(const std::string &n)
 	return f;
 }
 
-std::vector<std::vector<double>> makeCentroids(const std::vector<double> &allData, const std::vector<size_t> &indices, size_t numCols)
+std::vector<double> makeCentroids(const std::vector<double> &allData, const std::vector<size_t> &indices, size_t numCols)
 {
-	std::vector<std::vector<double>> centroids(indices.size());
+	std::vector<double> centroids(indices.size() * numCols);
 	for (size_t i = 0; i < indices.size(); i++)
 	{
-		centroids[i].resize(numCols);
 		for (size_t j = 0; j < numCols; j++)
-			centroids[i][j] = allData[indices[i] * numCols + j];
+			centroids[i * numCols + j] = allData[indices[i] * numCols + j];
 	}
 	return centroids;
 }
 
-std::pair<double, int> find_closest_centroid_index_and_distance(const std::vector<double> &point, const std::vector<std::vector<double>> &centroids)
+std::pair<double, int> find_closest_centroid_index_and_distance(const std::vector<double> &point, const std::vector<double> &centroids, size_t numCols)
 {
 	double minDistance = std::numeric_limits<double>::max();
 	int centroidIndex = 0;
-	for (int i = 0; i < centroids.size(); i++)
+	for (int i = 0; i < centroids.size() / numCols; i++)
 	{
 		double distance = 0.0;
 		for (int j = 0; j < point.size(); j++)
 		{
-			distance += std::pow(point[j] - centroids[i][j], 2);
+			distance += std::pow(point[j] - centroids[i * numCols + j], 2);
 		}
 		if (distance < minDistance)
 		{
@@ -196,74 +195,110 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 		   int numClusters, int repetitions, int numBlocks, int numThreads,
 		   const std::string &centroidDebugFileName, const std::string &clusterDebugFileName)
 {
+	// Defined here so bottom calls can use it, if this is in an if for rank 0, it will not be available
 	FileCSVWriter centroidDebugFile = openDebugFile(centroidDebugFileName);
 	FileCSVWriter clustersDebugFile = openDebugFile(clusterDebugFileName);
-
 	FileCSVWriter csvOutputFile(outputFileName);
-	if (!csvOutputFile.is_open())
-	{
-		std::cerr << "Unable to open output file " << outputFileName << std::endl;
-		return -1;
-	}
 
-	// Load dataset
-	std::ifstream input(inputFile);
-	if (!input.is_open())
-	{
-		std::cerr << "UnablenumCols to open input file " << inputFile << std::endl;
-		return -1;
-	}
+	int rank, size, len;
+	char name[MPI_MAX_PROCESSOR_NAME + 1];
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &size);
+	MPI_Get_processor_name(name, &len);
+
+	std::cout << "Ready: " << name << " " << rank << " of " << size << std::endl;
+
 	std::vector<double> allData;
-	size_t numRows, numCols;
-	readData(input, allData, numRows, numCols);
+	size_t numRows = 0, numCols = 0;
+	if (rank == 0)
+	{
+		if (!csvOutputFile.is_open())
+		{
+			std::cerr << "Unable to open output file " << outputFileName << std::endl;
+			return -1;
+		}
+
+		// Load dataset
+		std::ifstream input(inputFile);
+		if (!input.is_open())
+		{
+			std::cerr << "Unable to open input file " << inputFile << std::endl;
+			return -1;
+		}
+		readData(input, allData, numRows, numCols);
+	}
 
 	Timer timer;
 
+	int pointsPerProcess = numRows / size;
+	std::cout << pointsPerProcess << std::endl;
+	std::cout << numRows << " / " << size << std::endl;
+	std::vector<double> localData(pointsPerProcess * numCols);
+	MPI_Request request;
+
+	if (rank == 0)
+	{
+		std::cout << "Scattering data" << std::endl;
+		MPI_Iscatter(allData.data(), pointsPerProcess * numCols, MPI_DOUBLE, localData.data(), pointsPerProcess * numCols, MPI_DOUBLE, 0, MPI_COMM_WORLD, &request);
+	}
+
+	std::vector<std::vector<double>> localPoints(pointsPerProcess, std::vector<double>(numCols));
+	for (int i = 0; i < pointsPerProcess; i++)
+	{
+		for (int j = 0; j < numCols; j++)
+		{
+			localPoints[i][j] = localData[i * numCols + j];
+		}
+	}
+
 	std::vector<int> bestClusters;
 	double bestDistSquaredSum = std::numeric_limits<double>::max();
+	double globalDistSquaredSum = 0;
 	std::vector<size_t> stepsPerRepetition(repetitions);
 
 	for (int r = 0; r < repetitions; r++)
 	{
 		size_t numSteps = 0;
-		std::vector<std::vector<double>> centroids(numClusters);
+		std::vector<double> centroids(numClusters * numCols);
 		std::vector<size_t> clusters_size(numClusters);
 		rng.pickRandomIndices(numRows, clusters_size);
 		std::vector<int> clusters(numRows, -1);
+		std::vector<int> localClusters(pointsPerProcess, -1);
 
 		centroids = makeCentroids(allData, clusters_size, numCols);
+		MPI_Bcast(centroids.data(), numClusters * numCols, MPI_DOUBLE, 0, MPI_COMM_WORLD, &request);
 
-		bool changed = true;
-		while (changed)
+		bool globalChanged = true;
+		while (globalChanged)
 		{
-			changed = false;
+			globalChanged = false;
 			double distanceSquaredSum = 0;
 
-			for (int p = 0; p < numRows; ++p)
+			for (int p = 0; p < localPoints.size(); ++p)
 			{
-				std::vector<double> point(numCols);
-				for (int i = 0; i < numCols; i++)
-				{
-					int index = p * numCols + i;
-					point[i] = allData[index];
-				}
-
-				std::pair<double, int> distAndIndex = find_closest_centroid_index_and_distance(point, centroids);
+				std::cout << "Name: " << name << " Point: " << p << std::endl;
+				std::pair<double, int> distAndIndex = find_closest_centroid_index_and_distance(localPoints[p], centroids, numCols);
 				distanceSquaredSum += distAndIndex.first;
-				// distanceSquaredSum = std::sqrt(distanceSquaredSum);
 
 				if (distAndIndex.second != clusters[p])
 				{
-					clusters[p] = distAndIndex.second;
-					changed = true;
+					localClusters[p] = distAndIndex.second;
+					bool changed = true;
+					MPI_Allreduce(&changed, &globalChanged, 1, MPI_C_BOOL, MPI_LOR, MPI_COMM_WORLD);
 				}
 			}
+			MPI_Reduce(&distanceSquaredSum, &globalDistSquaredSum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+			MPI_Gather(localClusters.data(), pointsPerProcess, MPI_INT, clusters.data(), pointsPerProcess, MPI_INT, 0, MPI_COMM_WORLD);
 
-			if (changed)
+			if (globalChanged && rank == 0)
 			{
 				for (int j = 0; j < numClusters; j++)
 				{
-					centroids[j] = average_of_points_with_cluster(j, clusters, allData, numCols);
+					std::vector<double> avg = average_of_points_with_cluster(j, clusters, allData, numCols);
+					for (int k = 0; k < numCols; k++)
+					{
+						centroids[j * numCols + k] = avg[k];
+					}
 				}
 			}
 
@@ -273,7 +308,7 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 				bestClusters = clusters;
 			}
 
-			if (r == 0 && numSteps == 0)
+			if (r == 0 && numSteps == 0 && rank == 0)
 			{
 				std::cout << "Printing clusters" << std::endl;
 				clustersDebugFile.write(clusters, "# Clusters:\n");
