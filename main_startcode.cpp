@@ -84,7 +84,7 @@ Arguments:
 
 // Helper function to read input file into allData, setting number of detected
 // rows and columns. Feel free to use, adapt or ignore
-void readData(std::ifstream &input, std::vector<double> &allData, size_t &numRows, size_t &numCols)
+void readData(std::ifstream& input, std::vector<double>& allData, size_t& numRows, size_t& numCols)
 {
 	if (!input.is_open())
 		throw std::runtime_error("Input file is not open");
@@ -119,7 +119,7 @@ void readData(std::ifstream &input, std::vector<double> &allData, size_t &numRow
 	numCols = (size_t)numColsExpected;
 }
 
-FileCSVWriter openDebugFile(const std::string &n)
+FileCSVWriter openDebugFile(const std::string& n)
 {
 	FileCSVWriter f;
 
@@ -132,27 +132,29 @@ FileCSVWriter openDebugFile(const std::string &n)
 	return f;
 }
 
-std::vector<double> makeCentroids(const std::vector<double> &allData, const std::vector<size_t> &indices, size_t numCols)
+std::vector<std::vector<double>> makeCentroids(const std::vector<double>& allData, const std::vector<size_t>& indices, size_t numCols)
 {
-	std::vector<double> centroids(indices.size() * numCols);
+	std::vector<std::vector<double>> centroids(indices.size());
 	for (size_t i = 0; i < indices.size(); i++)
 	{
+		centroids[i].resize(numCols);
 		for (size_t j = 0; j < numCols; j++)
-			centroids[i * numCols + j] = allData[indices[i] * numCols + j];
+			centroids[i][j] = allData[indices[i] * numCols + j];
 	}
 	return centroids;
+
 }
 
-std::pair<double, int> find_closest_centroid_index_and_distance(const std::vector<double> &point, const std::vector<double> &centroids, size_t numCols)
+std::pair<double, int> find_closest_centroid_index_and_distance(const std::vector<double>& point, const std::vector<std::vector<double>>& centroids)
 {
 	double minDistance = std::numeric_limits<double>::max();
 	int centroidIndex = 0;
-	for (int i = 0; i < centroids.size() / numCols; i++)
+	for (int i = 0; i < centroids.size(); i++)
 	{
 		double distance = 0.0;
 		for (int j = 0; j < point.size(); j++)
 		{
-			distance += std::pow(point[j] - centroids[i * numCols + j], 2);
+			distance += std::pow(point[j] - centroids[i][j], 2);
 		}
 		if (distance < minDistance)
 		{
@@ -160,10 +162,10 @@ std::pair<double, int> find_closest_centroid_index_and_distance(const std::vecto
 			minDistance = distance;
 		}
 	}
-	return {minDistance, centroidIndex};
+	return { minDistance, centroidIndex };
 }
 
-std::vector<double> average_of_points_with_cluster(int clusterIndex, const std::vector<int> &clusters, const std::vector<double> &allData, size_t numCols)
+std::vector<double> average_of_points_with_cluster(int clusterIndex, const std::vector<int>& clusters, const std::vector<double>& allData, size_t numCols)
 {
 	double average = 0;
 	int count = 0;
@@ -191,9 +193,9 @@ std::vector<double> average_of_points_with_cluster(int clusterIndex, const std::
 	return averageVector;
 }
 
-int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFileName,
-		   int numClusters, int repetitions, int numBlocks, int numThreads,
-		   const std::string &centroidDebugFileName, const std::string &clusterDebugFileName)
+int kmeans(Rng& rng, const std::string& inputFile, const std::string& outputFileName,
+	int numClusters, int repetitions, int numBlocks, int numThreads,
+	const std::string& centroidDebugFileName, const std::string& clusterDebugFileName)
 {
 	// Defined here so bottom calls can use it, if this is in an if for rank 0, it will not be available
 	FileCSVWriter centroidDebugFile = openDebugFile(centroidDebugFileName);
@@ -209,7 +211,7 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 	std::cout << "Ready: " << name << " " << rank << " of " << size << std::endl;
 
 	std::vector<double> allData;
-	size_t numRows = 0, numCols = 0;
+	size_t numRows, numCols;
 	if (rank == 0)
 	{
 		if (!csvOutputFile.is_open())
@@ -222,10 +224,10 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 		std::ifstream input(inputFile);
 		if (!input.is_open())
 		{
-			std::cerr << "Unable to open input file " << inputFile << std::endl;
+			std::cerr << "UnablenumCols to open input file " << inputFile << std::endl;
 			return -1;
 		}
-		readData(input, allData, numRows, numCols);
+	readData(input, allData, numRows, numCols);
 	}
 
 	Timer timer;
@@ -235,11 +237,11 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 	std::cout << numRows << " / " << size << std::endl;
 	std::vector<double> localData(pointsPerProcess * numCols);
 	MPI_Request request;
-
+	
 	if (rank == 0)
 	{
-		std::cout << "Scattering data" << std::endl;
-		MPI_Iscatter(allData.data(), pointsPerProcess * numCols, MPI_DOUBLE, localData.data(), pointsPerProcess * numCols, MPI_DOUBLE, 0, MPI_COMM_WORLD, &request);
+	std::cout << "Scattering data" << std::endl;
+	MPI_Iscatter(allData.data(), pointsPerProcess * numCols, MPI_DOUBLE, localData.data(), pointsPerProcess * numCols, MPI_DOUBLE, 0, MPI_COMM_WORLD, &request);
 	}
 
 	std::vector<std::vector<double>> localPoints(pointsPerProcess, std::vector<double>(numCols));
@@ -251,6 +253,7 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 		}
 	}
 
+
 	std::vector<int> bestClusters;
 	double bestDistSquaredSum = std::numeric_limits<double>::max();
 	double globalDistSquaredSum = 0;
@@ -259,14 +262,14 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 	for (int r = 0; r < repetitions; r++)
 	{
 		size_t numSteps = 0;
-		std::vector<double> centroids(numClusters * numCols);
+		std::vector<std::vector<double>> centroids(numClusters);
 		std::vector<size_t> clusters_size(numClusters);
 		rng.pickRandomIndices(numRows, clusters_size);
 		std::vector<int> clusters(numRows, -1);
 		std::vector<int> localClusters(pointsPerProcess, -1);
 
 		centroids = makeCentroids(allData, clusters_size, numCols);
-		MPI_Bcast(centroids.data(), numClusters * numCols, MPI_DOUBLE, 0, MPI_COMM_WORLD, &request);
+		MPI_Bcast(centroids.data(), numClusters * numCols, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 		bool globalChanged = true;
 		while (globalChanged)
@@ -277,7 +280,7 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 			for (int p = 0; p < localPoints.size(); ++p)
 			{
 				std::cout << "Name: " << name << " Point: " << p << std::endl;
-				std::pair<double, int> distAndIndex = find_closest_centroid_index_and_distance(localPoints[p], centroids, numCols);
+				std::pair<double, int> distAndIndex = find_closest_centroid_index_and_distance(localPoints[p], centroids);
 				distanceSquaredSum += distAndIndex.first;
 
 				if (distAndIndex.second != clusters[p])
@@ -294,11 +297,7 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 			{
 				for (int j = 0; j < numClusters; j++)
 				{
-					std::vector<double> avg = average_of_points_with_cluster(j, clusters, allData, numCols);
-					for (int k = 0; k < numCols; k++)
-					{
-						centroids[j * numCols + k] = avg[k];
-					}
+					centroids[j] = average_of_points_with_cluster(j, clusters, allData, numCols);
 				}
 			}
 
@@ -317,6 +316,7 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 			centroidDebugFile.write(centroids, "# Centroids:\n");
 
 			++numSteps;
+
 		}
 
 		stepsPerRepetition[r] = numSteps;
@@ -329,9 +329,9 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 
 	std::cerr << "# Type,blocks,threads,file,seed,clusters,repetitions,bestdistsquared,timeinseconds" << std::endl;
 	std::cout << "mpi," << numBlocks << "," << numThreads << "," << inputFile << ","
-			  << rng.getUsedSeed() << "," << numClusters << ","
-			  << repetitions << "," << bestDistSquaredSum << "," << timer.durationNanoSeconds() / 1e9
-			  << std::endl;
+		<< rng.getUsedSeed() << "," << numClusters << ","
+		<< repetitions << "," << bestDistSquaredSum << "," << timer.durationNanoSeconds() / 1e9
+		<< std::endl;
 
 	csvOutputFile.write(stepsPerRepetition, "# Steps: ");
 	csvOutputFile.write(bestClusters);
@@ -339,7 +339,7 @@ int kmeans(Rng &rng, const std::string &inputFile, const std::string &outputFile
 	return 0;
 }
 
-int mainCxx(const std::vector<std::string> &args)
+int mainCxx(const std::vector<std::string>& args)
 {
 	if (args.size() % 2 != 0)
 		usage();
@@ -382,10 +382,10 @@ int mainCxx(const std::vector<std::string> &args)
 	Rng rng(seed);
 
 	return kmeans(rng, inputFileName, outputFileName, numClusters, repetitions,
-				  numBlocks, numThreads, centroidTraceFileName, clusterTraceFileName);
+		numBlocks, numThreads, centroidTraceFileName, clusterTraceFileName);
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
 	MPI_Init(&argc, &argv);
 
